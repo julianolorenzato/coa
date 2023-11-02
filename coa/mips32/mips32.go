@@ -7,61 +7,62 @@ import (
 	"os"
 )
 
+// Bitmasks (&)
+const (
+	OPCODE   = 0b_111111_00000_00000_00000_00000_000000
+	RS       = 0b_000000_11111_00000_00000_00000_000000
+	RT       = 0b_000000_00000_11111_00000_00000_000000
+	RD       = 0b_000000_00000_00000_11111_00000_000000
+	SHAMT    = 0b_000000_00000_00000_00000_11111_000000
+	FUNCTION = 0b_000000_00000_00000_00000_00000_111111
+	OFFSET   = 0b_000000_00000_00000_11111_11111_111111
+	TARGET   = 0b_000000_11111_11111_11111_11111_111111
+	HI       = 0b_111111_11111_11111_00000_00000_000000
+	LO       = 0b_000000_00000_00000_11111_11111_111111
+)
+
 type MIPS32 struct {
-	Registers   [32]uint32
-	Hi          uint32
-	Lo          uint32
-	Pc          uint32
-	InstrMemory Memory
-	DataMemory  Memory
-	Running     bool
+	Registers    [32]uint32
+	Hi           uint32
+	Lo           uint32
+	Pc           uint32
+	InstrMemory  Memory
+	DataMemory   Memory
+	Running      bool
+	Instructions map[uint32]func(info *instrInfo)
+}
+
+type Memory interface {
+	Read(Address [4]byte) [4]byte
+	Write(Address [4]byte, Data [4]byte)
 }
 
 func NewMIPS32() *MIPS32 {
-	return &MIPS32{
-		Registers:   [32]uint32{0},
-		Hi:          0,
-		Lo:          0,
-		Pc:          0,
-		InstrMemory: nil,
-		DataMemory:  nil,
-		Running:     false,
+	mips32 := &MIPS32{
+		Registers:    [32]uint32{},
+		Hi:           0,
+		Lo:           0,
+		Pc:           0,
+		InstrMemory:  nil,
+		DataMemory:   nil,
+		Running:      false,
+		Instructions: map[uint32]func(info *instrInfo){},
+	}
+
+	mips32.fillInstructions()
+
+	return mips32
+}
+
+func (cpu *MIPS32) fillInstructions() {
+	cpu.Instructions = map[uint32]func(info *instrInfo){
+		0b_000000: cpu.r,
+		0b_000100: cpu.beq,
+		0b_000010: cpu.j,
+		0b_111111: cpu.hlt,
 	}
 }
 
-type Instr uint32
-
-//var instrBitmasks = map[string]uint32{
-//	"add": 0b_000000_00000_00000_00000_00000_100000,
-//	"and": 0b_000000_00000_00000_00000_00000_100100,
-//	"nor": 0b_000000_00000_00000_00000_00000_100111,
-//	"sub": 0b_000000_00000_00000_00000_00000_100010,
-//}
-
-// OPCODES
-const (
-	R   = 0b_000000
-	BEQ = 0b_000100
-	HLT = 0b_111111
-)
-
-// FUNCTS
-const (
-	ADD = 0b_100000
-	AND = 0b_100100
-	NOR = 0b_100111
-	OR  = 0b_100101
-	SLT = 0b_101010
-	SUB = 0b_100010
-	XOR = 0b_100110
-)
-
-type Memory interface {
-	Read(Address uint32) int32
-	Write(Address uint32, Data int32)
-}
-
-// MAYBE CONVERT ALL TYPES TO BYTE ARRAYS AND USE UINT32 OR INT32 INSIDE THE FUNCTIONS
 func (cpu *MIPS32) LoadInstructionsInMemory(filename string) {
 	fd, err := os.Open(filename)
 	if err != nil {
@@ -69,20 +70,17 @@ func (cpu *MIPS32) LoadInstructionsInMemory(filename string) {
 	}
 
 	b := make([]byte, 4)
-
-	var counter uint32 = 0
-
+	var addressCounter uint32 = 0
 	for {
-		read, err := fd.Read(b)
+		n, err := fd.Read(b)
 		if err != nil && !errors.Is(err, io.EOF) {
 			panic(err)
 		}
 
-		instr := binary.LittleEndian.Uint32(b)
-		cpu.InstrMemory.Write(counter, int32(instr))
-		counter += 4
+		cpu.InstrMemory.Write(encodeWord(addressCounter), [4]byte(b))
+		addressCounter += 4
 
-		if read == 0 {
+		if n == 0 {
 			break
 		}
 	}
@@ -92,88 +90,130 @@ func (cpu *MIPS32) StartProgram() {
 	cpu.Running = true
 
 	for cpu.Running {
-		pc := cpu.Pc
-		instr := Instr(cpu.InstrMemory.Read(pc))
-		cpu.DecodeInstr(instr)
+		instr := cpu.InstrMemory.Read(encodeWord(cpu.Pc))
+		cpu.executeInstr(instr)
 		cpu.Pc += 4
 	}
 }
 
-func (cpu *MIPS32) DecodeInstr(instr Instr) {
-	opCode := instr >> 26
-	funct := (instr << 26) >> 26
+func encodeWord(data uint32) [4]byte {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, data)
+	return [4]byte{buf[0], buf[1], buf[2], buf[3]}
+}
 
-	switch opCode {
-	case R:
-		regSource1 := (instr << 6) >> 26
-		regSource2 := (instr << 11) >> 26
-		regDestiny := (instr << 16) >> 26
+func decodeWord(word [4]byte) uint32 {
+	return binary.LittleEndian.Uint32(word[0:4])
+}
 
-		switch funct {
-		case ADD:
-			cpu.Registers[regDestiny] = cpu.Registers[regSource1] + cpu.Registers[regSource2]
-		case AND:
-			cpu.Registers[regDestiny] = cpu.Registers[regSource1] & cpu.Registers[regSource2]
-		case NOR:
-			cpu.Registers[regDestiny] = ^(cpu.Registers[regSource1] | cpu.Registers[regSource2])
-		case OR:
-			cpu.Registers[regDestiny] = cpu.Registers[regSource1] | cpu.Registers[regSource2]
-		case SLT:
-			if cpu.Registers[regSource1] < cpu.Registers[regSource2] {
-				cpu.Registers[regDestiny] = 1
-			} else {
-				cpu.Registers[regDestiny] = 0
-			}
-		case SUB:
-			cpu.Registers[regDestiny] = cpu.Registers[regSource1] - cpu.Registers[regSource2]
-		case XOR:
-			cpu.Registers[regDestiny] = cpu.Registers[regSource1] ^ cpu.Registers[regSource2]
-		}
-	case BEQ:
-		regSource1 := (instr << 6) >> 26
-		regSource2 := (instr << 11) >> 26
+type instrInfo struct {
+	rs     uint32
+	rt     uint32
+	rd     uint32
+	shamt  uint32
+	funct  uint32
+	offset uint32
+	target uint32
+}
 
-		if cpu.Registers[regSource1] == cpu.Registers[regSource2] {
-			cpu.Pc
-		}
-	case HLT:
-		cpu.Running = false
+func decodeInstr(data uint32) (opCode uint32, info instrInfo) {
+	opCode = (data & OPCODE) >> 26
+	info = instrInfo{
+		rs:     (data & RS) >> 21,
+		rt:     (data & RT) >> 16,
+		rd:     (data & RD) >> 11,
+		shamt:  (data & SHAMT) >> 6,
+		funct:  data & FUNCTION,
+		offset: data & OFFSET,
+		target: data & TARGET,
+	}
+	return
+}
+
+func (cpu *MIPS32) executeInstr(instr [4]byte) {
+	opCode, info := decodeInstr(decodeWord(instr))
+	cpu.Instructions[opCode](&info)
+}
+
+func (cpu *MIPS32) r(info *instrInfo) {
+	rOperations := map[uint32]func(info *instrInfo){
+		0b_100000: cpu.add,
+		0b_100100: cpu.and,
+		0b_011010: cpu.div,
+		0b_011000: cpu.mult,
+		0b_010010: cpu.mflo,
+		0b_010000: cpu.mfhi,
+		0b_100111: cpu.nor,
+		0b_100101: cpu.or,
+		0b_101010: cpu.slt,
+		0b_100010: cpu.sub,
+		0b_100110: cpu.xor,
+	}
+
+	rOperations[info.funct](info)
+}
+
+func (cpu *MIPS32) add(info *instrInfo) {
+	cpu.Registers[info.rd] = cpu.Registers[info.rs] + cpu.Registers[info.rt]
+}
+
+func (cpu *MIPS32) and(info *instrInfo) {
+	cpu.Registers[info.rd] = cpu.Registers[info.rs] & cpu.Registers[info.rt]
+}
+
+func (cpu *MIPS32) div(info *instrInfo) {
+	cpu.Lo = cpu.Registers[info.rs] / cpu.Registers[info.rt]
+	cpu.Hi = cpu.Registers[info.rs] % cpu.Registers[info.rt]
+}
+
+func (cpu *MIPS32) mult(info *instrInfo) {
+	res := uint64(cpu.Registers[info.rs]) * uint64(cpu.Registers[info.rt])
+	cpu.Hi = uint32((res & HI) >> 32)
+	cpu.Lo = uint32(res & LO)
+}
+
+func (cpu *MIPS32) mflo(info *instrInfo) {
+	cpu.Registers[info.rd] = cpu.Lo
+}
+
+func (cpu *MIPS32) mfhi(info *instrInfo) {
+	cpu.Registers[info.rd] = cpu.Hi
+}
+
+func (cpu *MIPS32) nor(info *instrInfo) {
+	cpu.Registers[info.rd] = ^(cpu.Registers[info.rs] | cpu.Registers[info.rt])
+}
+
+func (cpu *MIPS32) or(info *instrInfo) {
+	cpu.Registers[info.rd] = cpu.Registers[info.rs] | cpu.Registers[info.rt]
+}
+
+func (cpu *MIPS32) slt(info *instrInfo) {
+	if cpu.Registers[info.rs] < cpu.Registers[info.rt] {
+		cpu.Registers[info.rd] = 1
+	} else {
+		cpu.Registers[info.rd] = 0
 	}
 }
 
-type Registers struct {
-	//Zero uint32
-	//At uint32
-	//V0 uint32
-	//V1 uint32
-	//A0 uint32
-	//A1 uint32
-	//A2 uint32
-	//A3 uint32
-	//T0 uint32
-	//T1 uint32
-	//T2 uint32
-	//T3 uint32
-	//T4 uint32
-	//T5 uint32
-	//T6 uint32
-	//T7 uint32
-	//S0 uint32
-	//S1 uint32
-	//S2 uint32
-	//S3 uint32
-	//S4 uint32
-	//S5 uint32
-	//S6 uint32
-	//S7 uint32
-	//T8 uint32
-	//T9 uint32
-	//K0 uint32
-	//K1 uint32
-	//Gp uint32
-	//Sp uint32
-	//Fp uint32
-	//Ra uint32
-	Hi uint32
-	Lo uint32
+func (cpu *MIPS32) sub(info *instrInfo) {
+	cpu.Registers[info.rd] = cpu.Registers[info.rs] + cpu.Registers[info.rt]
+}
+
+func (cpu *MIPS32) xor(info *instrInfo) {
+	cpu.Registers[info.rd] = cpu.Registers[info.rs] ^ cpu.Registers[info.rt]
+}
+
+func (cpu *MIPS32) beq(info *instrInfo) {
+	if cpu.Registers[info.rs] == cpu.Registers[info.rt] {
+		cpu.Pc += info.offset
+	}
+}
+
+func (cpu *MIPS32) j(info *instrInfo) {
+	cpu.Pc = info.target
+}
+
+func (cpu *MIPS32) hlt(_ *instrInfo) {
+	cpu.Running = false
 }
