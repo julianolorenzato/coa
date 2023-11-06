@@ -32,11 +32,6 @@ type MIPS32 struct {
 	Instructions map[uint32]func(info *instrInfo)
 }
 
-type Memory interface {
-	Read(Address [4]byte) [4]byte
-	Write(Address [4]byte, Data [4]byte)
-}
-
 func NewMIPS32() *MIPS32 {
 	mips32 := &MIPS32{
 		Registers:    [32]uint32{},

@@ -1,7 +1,6 @@
 package tree
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 )
@@ -78,13 +77,9 @@ func TestNewCompleteBinaryTree(t *testing.T) {
 		},
 	}
 
-	args := []any{2, 3, 4, 2, 5}
+	got := NewCompleteBinaryTree([]any{2, 3, 4, 2, 5})
 
-	got := NewCompleteBinaryTree(args).
-		fmt.Println(want)
-
-	if got := NewCompleteBinaryTree(args); reflect.DeepEqual(got, want) {
+	if !CompareSubTrees(want.Root, got.Root) {
 		t.Errorf("NewCompleteBinaryTree want = %v, got = %v", want, got)
 	}
-	fmt.Println(NewCompleteBinaryTree(args))
 }
