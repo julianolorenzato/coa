@@ -1,7 +1,8 @@
 package main
 
-import "github.com/julianolorenzato/computer-science/dsa/slidingwindow"
+import "github.com/julianolorenzato/fibit/cmd"
+
 
 func main() {
-	slidingwindow.FlippingSwappingDemo()
+	cmd.Execute()
 }
