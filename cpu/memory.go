@@ -1,4 +1,4 @@
-package mips32
+package cpu
 
 type Memory interface {
 	Read(Address [4]byte) [4]byte

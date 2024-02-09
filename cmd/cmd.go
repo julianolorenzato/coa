@@ -8,8 +8,10 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "emuk",
+	Use:   "emuk [command]",
 	Short: "Emuk is a CPU and memory simulator",
+	Args:  cobra.ExactArgs(1),
+	//Example: "aaa",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Here")
 	},

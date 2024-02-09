@@ -3,6 +3,7 @@ package mips32
 import (
 	"encoding/binary"
 	"errors"
+	"github.com/julianolorenzato/fibit/memory"
 	"io"
 	"os"
 )
@@ -26,8 +27,8 @@ type MIPS32 struct {
 	Hi           uint32
 	Lo           uint32
 	Pc           uint32
-	InstrMemory  Memory
-	DataMemory   Memory
+	InstrMemory  memory.Memory
+	DataMemory   memory.Memory
 	Running      bool
 	Instructions map[uint32]func(info *instrInfo)
 }
