@@ -2,10 +2,7 @@ package mips32
 
 import (
 	"encoding/binary"
-	"errors"
 	"github.com/julianolorenzato/fibit/memory"
-	"io"
-	"os"
 )
 
 // Bitmasks (&)
@@ -56,41 +53,43 @@ func (cpu *MIPS32) fillInstructions() {
 		0b_000100: cpu.beq,
 		0b_000010: cpu.j,
 		0b_111111: cpu.hlt,
+		0b_101011: cpu.sw,
+		0b_100011: cpu.lw,
 	}
 }
 
-func (cpu *MIPS32) LoadInstructionsInMemory(filename string) {
-	fd, err := os.Open(filename)
-	if err != nil {
-		panic(err)
-	}
+//func (cpu *MIPS32) LoadInstructionsInMemory(filename string) {
+//	fd, err := os.Open(filename)
+//	if err != nil {
+//		panic(err)
+//	}
+//
+//	b := make([]byte, 4)
+//	var addressCounter uint32 = 0
+//	for {
+//		n, err := fd.Read(b)
+//		if err != nil && !errors.Is(err, io.EOF) {
+//			panic(err)
+//		}
+//
+//		cpu.InstrMemory.Write(encodeWord(addressCounter), [4]byte(b))
+//		addressCounter += 4
+//
+//		if n == 0 {
+//			break
+//		}
+//	}
+//}
 
-	b := make([]byte, 4)
-	var addressCounter uint32 = 0
-	for {
-		n, err := fd.Read(b)
-		if err != nil && !errors.Is(err, io.EOF) {
-			panic(err)
-		}
-
-		cpu.InstrMemory.Write(encodeWord(addressCounter), [4]byte(b))
-		addressCounter += 4
-
-		if n == 0 {
-			break
-		}
-	}
-}
-
-func (cpu *MIPS32) StartProgram() {
-	cpu.Running = true
-
-	for cpu.Running {
-		instr := cpu.InstrMemory.Read(encodeWord(cpu.Pc))
-		cpu.executeInstr(instr)
-		cpu.Pc += 4
-	}
-}
+//func (cpu *MIPS32) StartProgram() {
+//	cpu.Running = true
+//
+//	for cpu.Running {
+//		instr := cpu.InstrMemory.Read(encodeWord(cpu.Pc))
+//		cpu.executeInstr(instr)
+//		cpu.Pc += 4
+//	}
+//}
 
 func encodeWord(data uint32) [4]byte {
 	buf := make([]byte, 4)
@@ -126,7 +125,7 @@ func decodeInstr(data uint32) (opCode uint32, info instrInfo) {
 	return
 }
 
-func (cpu *MIPS32) executeInstr(instr [4]byte) {
+func (cpu *MIPS32) ExecuteInstr(instr [4]byte) {
 	opCode, info := decodeInstr(decodeWord(instr))
 	cpu.Instructions[opCode](&info)
 }
@@ -212,4 +211,22 @@ func (cpu *MIPS32) j(info *instrInfo) {
 
 func (cpu *MIPS32) hlt(_ *instrInfo) {
 	cpu.Running = false
+}
+
+func (cpu *MIPS32) sw(info *instrInfo) {
+	bytes := encodeWord(cpu.Registers[info.rt])
+
+	cpu.DataMemory.Write(info.rs+info.offset, bytes[0])
+	cpu.DataMemory.Write(info.rs+info.offset+1, bytes[1])
+	cpu.DataMemory.Write(info.rs+info.offset+2, bytes[2])
+	cpu.DataMemory.Write(info.rs+info.offset+3, bytes[3])
+}
+
+func (cpu *MIPS32) lw(info *instrInfo) {
+	b1 := cpu.DataMemory.Read(info.rs + info.offset)
+	b2 := cpu.DataMemory.Read(info.rs + info.offset + 1)
+	b3 := cpu.DataMemory.Read(info.rs + info.offset + 2)
+	b4 := cpu.DataMemory.Read(info.rs + info.offset + 3)
+
+	cpu.Registers[info.rt] = decodeWord([4]byte{b1, b2, b3, b4})
 }

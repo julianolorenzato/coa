@@ -1,13 +1,12 @@
 package memory
 
-// RAM has 32bits address and 4GB data storage
 type RAM struct {
-	data []byte
-	PageTable
+	memory Memory
+	//PageTable
 }
 
-//func NewRAM(size Size) {
-//	sizeLen := len(size)
-//
-//	math.Log2(float64(sizeLen))
-//}
+func NewRAM(memory Memory) *RAM {
+	return &RAM{
+		memory: memory,
+	}
+}

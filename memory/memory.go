@@ -1,29 +1,38 @@
 package memory
 
-type Word [4]byte
+import (
+	"fmt"
+)
 
-//type Memory interface {
-//	Read(address any) Word
-//	Write(address any, word Word)
-//}
+type Memory []byte
 
-type MemorySystem struct {
-	*Cache
-	*TLB
-	*RAM
-}
-
-type Memory[S Space] struct {
-	Data S
-}
-
-func NewMemory[S Space]() *Memory[S] {
-	return new(Memory[S])
-}
-
-func receiveInput[S Space](size Size) *Memory[S] {
-	switch size {
-	case S1KILO:
-		return NewMemory()
+func NewMemory(s uint32) (Memory, error) {
+	size, err := validateSize(s)
+	if err != nil {
+		return nil, err
 	}
+
+	return make(Memory, size), nil
+}
+
+func (m Memory) Size() uint32 {
+	return uint32(len(m))
+}
+
+func (m Memory) Read(address uint32) byte {
+	return m[address]
+}
+
+func (m Memory) Write(address uint32, data byte) {
+	m[address] = data
+}
+
+func validateSize(s uint32) (Size, error) {
+	size := Size(s)
+
+	if availableSizes[size] {
+		return size, nil
+	}
+
+	return size, fmt.Errorf("invalid size %dbytes", size)
 }
